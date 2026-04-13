@@ -1,7 +1,7 @@
-// app/(dashboard)/layout.tsx
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
+import AccessibilityWidget from '@/components/AccessibilityWidget'
 
 export default async function DashboardLayout({
     children,
@@ -23,6 +23,9 @@ export default async function DashboardLayout({
                     {children}
                 </div>
             </main>
+
+            {/* Widget de Accesibilidad - botón flotante inferior derecho */}
+            <AccessibilityWidget />
         </div>
     )
 }

@@ -1,29 +1,46 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Shield, User, RefreshCw, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
+import { Shield, User, RefreshCw, AlertTriangle, CheckCircle, XCircle, Search } from 'lucide-react'
 
 interface Usuario {
     id: string
     email: string
     full_name: string
+    apodo: string
     rol: string
     created_at: string
 }
 
 export default function AdminUsuariosPage() {
     const [usuarios, setUsuarios] = useState<Usuario[]>([])
+    const [filteredUsuarios, setFilteredUsuarios] = useState<Usuario[]>([])
     const [loading, setLoading] = useState(true)
     const [cambiando, setCambiando] = useState<string | null>(null)
     const [mensaje, setMensaje] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null)
     const [isAdmin, setIsAdmin] = useState(false)
     const [currentUserEmail, setCurrentUserEmail] = useState<string>('')
+    const [searchTerm, setSearchTerm] = useState('')
     const supabase = createClient()
 
     useEffect(() => {
         verificarAdmin()
         cargarUsuarios()
     }, [])
+
+    useEffect(() => {
+        if (searchTerm) {
+            setFilteredUsuarios(
+                usuarios.filter(u =>
+                    u.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    u.apodo?.toLowerCase().includes(searchTerm.toLowerCase())
+                )
+            )
+        } else {
+            setFilteredUsuarios(usuarios)
+        }
+    }, [searchTerm, usuarios])
 
     async function verificarAdmin() {
         const { data: { user } } = await supabase.auth.getUser()
@@ -47,6 +64,7 @@ export default function AdminUsuariosPage() {
 
             if (error) throw error
             setUsuarios(data || [])
+            setFilteredUsuarios(data || [])
         } catch (error) {
             console.error('Error:', error)
         } finally {
@@ -70,6 +88,18 @@ export default function AdminUsuariosPage() {
                 .eq('id', usuarioId)
 
             if (error) throw error
+
+            // Registrar en bitácora
+            await supabase
+                .from('actividades')
+                .insert({
+                    usuario_id: (await supabase.auth.getUser()).data.user?.id,
+                    usuario_nombre: 'Administrador',
+                    accion: rolActual === 'admin' ? 'quitó rol admin a' : 'dio rol admin a',
+                    entidad: 'usuario',
+                    detalles: { usuario: email, nuevo_rol: nuevoRol },
+                    created_at: new Date().toISOString()
+                })
 
             setMensaje({
                 tipo: 'success',
@@ -133,6 +163,20 @@ export default function AdminUsuariosPage() {
                 </div>
             )}
 
+            {/* Buscador */}
+            <div className="bg-white rounded-xl shadow-sm p-4">
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder="Buscar por nombre, email o apodo..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                </div>
+            </div>
+
             <div className="bg-white rounded-xl shadow-sm overflow-hidden">
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -152,7 +196,7 @@ export default function AdminUsuariosPage() {
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {usuarios.map((usuario) => (
+                        {filteredUsuarios.map((usuario) => (
                             <tr key={usuario.id} className="hover:bg-gray-50 transition">
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <div className="flex items-center">
@@ -168,8 +212,11 @@ export default function AdminUsuariosPage() {
                                         </div>
                                         <div className="ml-4">
                                             <div className="text-sm font-medium text-gray-900">
-                                                {usuario.full_name || 'Sin nombre'}
+                                                {usuario.apodo || usuario.full_name || 'Sin nombre'}
                                             </div>
+                                            {usuario.full_name && (
+                                                <div className="text-xs text-gray-400">{usuario.full_name}</div>
+                                            )}
                                         </div>
                                     </div>
                                 </td>
@@ -208,6 +255,13 @@ export default function AdminUsuariosPage() {
                     </tbody>
                 </table>
             </div>
+
+            {filteredUsuarios.length === 0 && (
+                <div className="text-center py-12 bg-white rounded-xl">
+                    <User className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500">No se encontraron usuarios</p>
+                </div>
+            )}
 
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                 <div className="flex items-start gap-3">

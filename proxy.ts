@@ -25,17 +25,64 @@ export async function proxy(request: NextRequest) {
 
     const { data: { user } } = await supabase.auth.getUser()
 
-    if (!user && !request.nextUrl.pathname.startsWith('/login') && !request.nextUrl.pathname.startsWith('/register')) {
-        return NextResponse.redirect(new URL('/login', request.url))
+    const pathname = request.nextUrl.pathname
+
+    // Rutas públicas (sin autenticación)
+    const publicPaths = ['/login', '/register', '/contacto']
+    const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
+
+    // Rutas protegidas (requieren autenticación)
+    const protectedPaths = [
+        '/',
+        '/directorio',
+        '/anuncios',
+        '/documentos',
+        '/formularios',
+        '/perfil',
+        '/mensajes',
+        '/videollamada'
+    ]
+    const isProtectedPath = protectedPaths.some(path => pathname === path) || pathname.startsWith('/admin')
+
+    // Redirigir a login si no está autenticado y trata de acceder a ruta protegida
+    if (!user && !isPublicPath) {
+        const redirectUrl = new URL('/login', request.url)
+        return NextResponse.redirect(redirectUrl)
     }
 
-    if (user && (request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/register'))) {
-        return NextResponse.redirect(new URL('/', request.url))
+    // Redirigir a dashboard si está autenticado y trata de acceder a ruta pública (login, register, contacto)
+    if (user && isPublicPath) {
+        const redirectUrl = new URL('/', request.url)
+        return NextResponse.redirect(redirectUrl)
+    }
+
+    // Verificar roles para rutas de admin (solo administradores)
+    if (user && pathname.startsWith('/admin')) {
+        const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('rol')
+            .eq('id', user.id)
+            .single()
+
+        if (error || profile?.rol !== 'admin') {
+            // Redirigir a dashboard si no es admin
+            const redirectUrl = new URL('/', request.url)
+            return NextResponse.redirect(redirectUrl)
+        }
     }
 
     return response
 }
 
 export const config = {
-    matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+    matcher: [
+        /*
+         * Match all request paths except:
+         * - _next/static (static files)
+         * - _next/image (image optimization files)
+         * - favicon.ico (favicon file)
+         * - public folder
+         */
+        '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    ],
 }
